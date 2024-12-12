@@ -50,7 +50,7 @@ async def db_start():
         # Создание таблицы резюме
         await cur.execute("""
         CREATE TABLE IF NOT EXISTS resumes (
-            user_id INTEGER NOT NULL, 
+            user_id BIGINT NOT NULL, 
             resume_link TEXT, 
             portfolio_link TEXT, 
             FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -60,7 +60,7 @@ async def db_start():
         # Создание таблицы лога выполнения\сдачи тестовых заданий
         await cur.execute("""
         CREATE TABLE IF NOT EXISTS tasks_progress (
-            user_id INTEGER NOT NULL,
+            user_id BIGINT NOT NULL,
             task_id INTEGER NOT NULL,
             action_type TEXT NOT NULL CHECK(action_type IN ('взял', 'сдал')),
             action_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -71,7 +71,7 @@ async def db_start():
         # Создание таблицы вопросов пользователей
         await cur.execute("""
         CREATE TABLE IF NOT EXISTS questions (
-            user_id INTEGER NOT NULL,
+            user_id BIGINT NOT NULL,
             question TEXT NOT NULL,
             q_type TEXT NOT NULL CHECK(q_type IN ('to bot', 'to admin')),
             q_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -81,8 +81,3 @@ async def db_start():
 
         # Подтверждаем изменения
         await db.commit()
-
-async def add_new_user():
-    # Подключаемся к базе данных
-    async with sq.connect("bot.db") as db:
-        cur = await db.cursor()

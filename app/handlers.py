@@ -184,7 +184,7 @@ async def vacancy_info_callback(callback: CallbackQuery):
         message_text += "📝 Доступные тестовые задания:\n"
         test_tasks_kb = InlineKeyboardBuilder()
         for task_id, task_name in test_tasks:
-            task_button_text = task_name[:50]  # Ограничиваем длину текста
+            task_button_text = task_name
             test_tasks_kb.button(text=task_button_text, callback_data=f"task:{task_id}")
         test_tasks_kb.adjust(1)
         await callback.message.answer(message_text, reply_markup=test_tasks_kb.as_markup())
