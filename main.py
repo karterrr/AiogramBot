@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher
 
 from app.handlers import router
 from app.database import db_start
+from bot_token import bot_token
 
 
 
@@ -15,7 +16,7 @@ async def on_startup():
 
 
 async def main():
-    bot = Bot(token='7239663211:AAGOwiIlwO6ogc7p7kbT1pyk2rw-3nf_jlM')
+    bot = Bot(bot_token)
     dp = Dispatcher()
     dp.include_router(router)
     await on_startup()

@@ -148,7 +148,7 @@ async def vacancies_list(message: Message):
 
     vacancies_kb = InlineKeyboardBuilder()
     for vacancy_id, vacancy_name in vacancies:
-        button_text = f"{vacancy_name or "No vacancie"} "
+        button_text = f"{vacancy_name or 'No vacancie'} "
         callback_data = f"vacancy:{vacancy_id}"
         vacancies_kb.button(text=button_text, callback_data=callback_data)
     vacancies_kb.adjust(1)
@@ -313,26 +313,42 @@ async def submit_task_callback(callback: CallbackQuery):
 
 
 # Вывод списка доступных конкурсов
+@router.callback_query(F.data == "back_to_contests")
 @router.message(F.text == "Список доступных конкурсов")
-async def contest_list(message: Message):
+async def contest_list(callback_or_message):
+    if isinstance(callback_or_message, Message):
+        message = callback_or_message
+        is_callback = False
+    else:
+        callback = callback_or_message
+        message = callback.message
+        is_callback = True
+
     async with aiosqlite.connect("bot.db") as db:
         async with db.execute("SELECT contest_id, contest_name FROM contests") as cursor:
             contests = await cursor.fetchall()
 
 
     if not contests:
-        await message.answer("Нет доступных конкурсов.")
+        if is_callback:
+            await message.edit_text("Нет доступных конкурсов.")
+        else:
+            await message.answer("Нет доступных конкурсов.")   
         return
     
 
     contests_kb = InlineKeyboardBuilder()
     for contest_id, contest_name in contests:
-        button_text = f"{contest_name or "No contest"} "
+        button_text = f"{contest_name or 'No contest'} "
         callback_data = f"contest:{contest_id}"
         contests_kb.button(text=button_text, callback_data=callback_data)
     contests_kb.adjust(1)
 
-    await message.answer("Выберите конкурс:", reply_markup=contests_kb.as_markup())
+    if is_callback:
+        await message.edit_text("Выберите конкурс:", reply_markup=contests_kb.as_markup())
+        await callback.answer()
+    else:
+        await message.answer("Выберите конкурс:", reply_markup=contests_kb.as_markup())
 
 
 # Обработчик нажатий на конкурсы
@@ -356,9 +372,13 @@ async def contest_info_callback(callback: CallbackQuery):
     contest_name, contest_description = contest
     message_text = f"🖥️ {contest_name}\n\n{contest_description}\n\n"
 
+    # Кнопка "Назад"
+    back_kb = InlineKeyboardBuilder()
+    back_kb.button(text="⇐ Назад", callback_data="back_to_contests")
+    back_kb.adjust(1)
 
     # Выводим описание конкурса
-    await callback.message.answer(message_text)
+    await callback.message.edit_text(message_text, reply_markup=back_kb.as_markup())
     await callback.answer()  # Закрываем уведомление
 
 
