@@ -134,15 +134,28 @@ async def get_q_to_bot(message: Message, state: FSMContext):
 
 
 # Вывод списка доступных вакансий
+@router.callback_query(F.data == "back_to_vacancies")
 @router.message(F.text == "Получить список вакансий")
-async def vacancies_list(message: Message):
+async def vacancies_list(callback_or_message):
+
+    if isinstance(callback_or_message, Message):
+        message = callback_or_message
+        is_callback = False
+    else:
+        callback = callback_or_message
+        message = callback.message
+        is_callback = True
+
     async with aiosqlite.connect("bot.db") as db:
         async with db.execute("SELECT vacancy_id, vacancy_name FROM vacancies") as cursor:
             vacancies = await cursor.fetchall()
 
 
     if not vacancies:
-        await message.answer("Нет доступных вакансий.")
+        if is_callback:
+            await message.edit_text("Нет доступных вакансий.")
+        else:
+            await message.answer("Нет доступных вакансий.")   
         return
     
 
@@ -153,7 +166,12 @@ async def vacancies_list(message: Message):
         vacancies_kb.button(text=button_text, callback_data=callback_data)
     vacancies_kb.adjust(1)
 
-    await message.answer("Выберите вакансию:", reply_markup=vacancies_kb.as_markup())
+    if is_callback:
+        await message.edit_text("Выберите вакансию:", reply_markup=vacancies_kb.as_markup())
+        await callback.answer()
+    else:
+        await message.answer("Выберите вакансию:", reply_markup=vacancies_kb.as_markup())
+
 
 # Обработчик нажатий на вакансии
 @router.callback_query(lambda c: c.data.startswith("vacancy:"))
@@ -186,19 +204,25 @@ async def vacancy_info_callback(callback: CallbackQuery):
         for task_id, task_name in test_tasks:
             task_button_text = task_name
             test_tasks_kb.button(text=task_button_text, callback_data=f"task:{task_id}")
+        test_tasks_kb.button(text="⇐ Назад", callback_data="back_to_vacancies")
         test_tasks_kb.adjust(1)
-        await callback.message.answer(message_text, reply_markup=test_tasks_kb.as_markup())
+        await callback.message.edit_text(message_text, reply_markup=test_tasks_kb.as_markup())
     else:
         message_text += "Нет доступных тестовых заданий."
-        await callback.message.answer(message_text)
+        test_tasks_kb = InlineKeyboardBuilder()
+        test_tasks_kb.button(text="⇐ Назад", callback_data="back_to_vacancies")
+        test_tasks_kb.adjust(1)
+        await callback.message.edit_text(message_text, reply_markup=test_tasks_kb.as_markup())
     await callback.answer()  # Закрываем уведомление
 
 
 
 
 # Вывод описания тестового задания с кнопками "Взять задание" и "Сдать задание"
+
 @router.callback_query(lambda c: c.data.startswith("task:"))
 async def task_description_callback(callback: CallbackQuery):
+
     task_id = callback.data.split(":")[1]  # Извлекаем ID тестового задания
     user_id = callback.from_user.id
 
@@ -210,6 +234,13 @@ async def task_description_callback(callback: CallbackQuery):
         ) as cursor:
             task = await cursor.fetchone()
 
+        # Получаем номер вакансии
+        async with db.execute(
+            "SELECT vacancy_id FROM test_tasks WHERE task_id = ?", 
+            (task_id,)
+        ) as cursor:
+            vacancy_id_row = await cursor.fetchone()
+
         # Проверяем статус задания для данного пользователя
         async with db.execute(
             "SELECT action_type FROM tasks_progress WHERE user_id = ? AND task_id = ? ORDER BY action_date DESC LIMIT 1",
@@ -219,10 +250,11 @@ async def task_description_callback(callback: CallbackQuery):
 
     # Если задание не найдено
     if not task:
-        await callback.message.answer("Тестовое задание не найдено.")
+        await callback.message.edit_text("Тестовое задание не найдено.")
         await callback.answer()
         return
 
+    vacancy_id = vacancy_id_row[0] if vacancy_id_row else None
     task_name, task_description = task
 
     # Формируем текст с описанием задания
@@ -236,9 +268,11 @@ async def task_description_callback(callback: CallbackQuery):
     elif task_status[0] == "взял":  # Задание взято
         task_kb.button(text="Сдать задание", callback_data=f"submit_task:{task_id}")
 
+    if vacancy_id:
+        task_kb.button(text="⇐ Назад", callback_data=f"vacancy:{vacancy_id}")
     task_kb.adjust(1)
 
-    await callback.message.answer(message_text, reply_markup=task_kb.as_markup(), parse_mode="HTML")
+    await callback.message.edit_text(message_text, reply_markup=task_kb.as_markup(), parse_mode="HTML")
     await callback.answer()
 
 # Обработчик кнопки "Взять задание"
@@ -268,7 +302,7 @@ async def take_task_callback(callback: CallbackQuery):
         )
         await db.commit()
 
-    await callback.message.answer("Вы взяли задание. Удачи!", parse_mode="HTML")
+    await callback.message.edit_text("Вы взяли задание. Удачи!", parse_mode="HTML")
     await callback.answer()
 
 # Обработчик кнопки "Сдать задание"
@@ -304,7 +338,7 @@ async def submit_task_callback(callback: CallbackQuery):
         )
         await db.commit()
 
-    await callback.message.answer("Вы сдали задание. Спасибо за работу!", parse_mode="HTML")
+    await callback.message.edit_text("Вы сдали задание. Спасибо за работу!", parse_mode="HTML")
     await callback.answer()
 
 
