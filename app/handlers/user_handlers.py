@@ -19,14 +19,23 @@ class QuestionStates(StatesGroup):
     waiting_for_question_to_bot = State()
     waiting_for_question_to_admin = State()
 
+class TaskLinkStates(StatesGroup):
+    waiting_for_task_link = State()
 
-# Блокировка кнопок в состоянии ожидания ссылки
+
+# Блокировка кнопок в состоянии ожидания ссылки на выполненное задание
+@router.callback_query(StateFilter(TaskLinkStates.waiting_for_task_link))
+async def block_buttons_during_state(callback: CallbackQuery):
+    await callback.answer("Сначала завершите отправку ссылки на задание.", show_alert=True)
+
+
+# Блокировка кнопок в состоянии ожидания ссылки "информация о себе"
 @router.callback_query(StateFilter(ResumeStates.waiting_for_resume_link))
 async def block_buttons_during_state(callback: CallbackQuery):
-    await callback.answer("Сначала завершите отправку ссылки.", show_alert=True)
+    await callback.answer("Сначала завершите отправку ссылки на резюме.", show_alert=True)
 @router.callback_query(StateFilter(ResumeStates.waiting_for_portfolio_link))
 async def block_buttons_during_state(callback: CallbackQuery):
-    await callback.answer("Сначала завершите отправку ссылки.", show_alert=True)
+    await callback.answer("Сначала завершите отправку ссылки на портфолио.", show_alert=True)
 
 
 # Блокировка кнопк в состоянии ожидания вопроса
@@ -85,7 +94,7 @@ async def resume(callback: CallbackQuery, state: FSMContext):
 
     # Устанавливаем состояние для получения вопроса боту
     await state.set_state(QuestionStates.waiting_for_question_to_bot)
-    await callback.message.answer("Пожалуйста, напишите свой вопрос:")
+    await callback.message.edit_text("Пожалуйста, напишите свой вопрос:")
     await callback.answer()
 
 @router.callback_query(F.data == "q_to_admin")
@@ -93,7 +102,7 @@ async def resume(callback: CallbackQuery, state: FSMContext):
 
     # Устанавливаем состояние для получения вопроса админу
     await state.set_state(QuestionStates.waiting_for_question_to_admin)
-    await callback.message.answer("Пожалуйста, напишите свой вопрос:")
+    await callback.message.edit_text("Пожалуйста, напишите свой вопрос:")
     await callback.answer()
 
 # Обработчик отправки вопроса боту
@@ -106,7 +115,7 @@ async def get_q_to_bot(message: Message, state: FSMContext):
     # Сохраняем вопрос в базе данных
     async with aiosqlite.connect("bot.db") as db:
         await db.execute(
-            "INSERT INTO questions (user_id, question, q_type, q_date) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+            "INSERT INTO questions (user_id, question, q_type, q_date, answered) VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)",
             (user_id, q, "to bot")
         )
         await db.commit()
@@ -124,7 +133,7 @@ async def get_q_to_bot(message: Message, state: FSMContext):
     # Сохраняем вопрос в базе данных
     async with aiosqlite.connect("bot.db") as db:
         await db.execute(
-            "INSERT INTO questions (user_id, question, q_type, q_date) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
+            "INSERT INTO questions (user_id, question, q_type, q_date, answered) VALUES (?, ?, ?, CURRENT_TIMESTAMP, 0)",
             (user_id, q, "to admin")
         )
         await db.commit()
@@ -147,7 +156,7 @@ async def vacancies_list(callback_or_message):
         is_callback = True
 
     async with aiosqlite.connect("bot.db") as db:
-        async with db.execute("SELECT vacancy_id, vacancy_name FROM vacancies") as cursor:
+        async with db.execute("SELECT vacancy_id, vacancy_name FROM vacancies WHERE vacancy_status = 1") as cursor:
             vacancies = await cursor.fetchall()
 
 
@@ -182,7 +191,7 @@ async def vacancy_info_callback(callback: CallbackQuery):
         async with db.execute("SELECT vacancy_name, vacancy_description FROM vacancies WHERE vacancy_id = ?", (vacancy_id)) as cursor:
             vacancy = await cursor.fetchone()
         
-        async with db.execute("SELECT task_id, task_name FROM test_tasks WHERE vacancy_id=?", (vacancy_id)) as cursor:
+        async with db.execute("SELECT task_id, task_name FROM test_tasks WHERE vacancy_id=? AND task_status = 1", (vacancy_id)) as cursor:
             test_tasks = await cursor.fetchall()
 
     # Проверяем, что вакансия найдена
@@ -307,7 +316,7 @@ async def take_task_callback(callback: CallbackQuery):
 
 # Обработчик кнопки "Сдать задание"
 @router.callback_query(lambda c: c.data.startswith("submit_task:"))
-async def submit_task_callback(callback: CallbackQuery):
+async def submit_task_callback(callback: CallbackQuery, state: FSMContext):
     task_id = callback.data.split(":")[1]
     user_id = callback.from_user.id
     action_type = "сдал"
@@ -330,19 +339,49 @@ async def submit_task_callback(callback: CallbackQuery):
             await callback.message.answer("Вы не можете сдать задание, которое не взяли.", parse_mode="HTML")
             await callback.answer()
             return
+        
+        # Устанавливаем состояние для получения ссылки на задание
+        await state.update_data(task_id=task_id) 
+        await state.set_state(TaskLinkStates.waiting_for_task_link)
+        await callback.message.edit_text("Пожалуйста, отправьте ссылку на выполненное задание. Вы можете отправить ссылку на GoogleDrive, ЯндексДиск или GitHub:")
+        await callback.answer()
 
         # Добавляем запись о сдаче задания
-        await db.execute(
+        """await db.execute(
             "INSERT INTO tasks_progress (user_id, task_id, action_type, action_date) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
             (user_id, task_id, action_type)
         )
-        await db.commit()
+        await db.commit()"""
 
-    await callback.message.edit_text("Вы сдали задание. Спасибо за работу!", parse_mode="HTML")
+    #await callback.message.edit_text("Вы сдали задание. Спасибо за работу!", parse_mode="HTML")
     await callback.answer()
 
 
+# Обработчик отправки ссылки на задание
+@router.message(StateFilter(TaskLinkStates.waiting_for_task_link))
+async def get_task_link(message: Message, state: FSMContext):
+    user_id = message.from_user.id
+    task_link = message.text  # Ссылка, отправленная пользователем
 
+    # Проверяем, является ли сообщение ссылкой
+    if not task_link.startswith("http"):
+        await message.answer("Пожалуйста, отправьте корректную ссылку.")
+        return
+
+    # Извлекаем task_id из состояния
+    data = await state.get_data()
+    task_id = data.get("task_id")
+
+    # Сохраняем ссылку в базе данных
+    async with aiosqlite.connect("bot.db") as db:
+        await db.execute(
+                "INSERT INTO tasks_progress (user_id, task_id, action_type, action_date, task_link) VALUES (?, ?, 'сдал', CURRENT_TIMESTAMP, ?)",
+                (user_id, task_id, task_link)
+            )
+        await db.commit()
+
+    await message.answer("Ссылка на задание успешно сохранена. Спасибо!")
+    await state.clear()  # Сбрасываем состояние
 
 
 
@@ -359,7 +398,7 @@ async def contest_list(callback_or_message):
         is_callback = True
 
     async with aiosqlite.connect("bot.db") as db:
-        async with db.execute("SELECT contest_id, contest_name FROM contests") as cursor:
+        async with db.execute("SELECT contest_id, contest_name FROM contests WHERE contest_status = 1") as cursor:
             contests = await cursor.fetchall()
 
 
@@ -433,7 +472,7 @@ async def resume(callback: CallbackQuery, state: FSMContext):
 
     # Устанавливаем состояние для получения ссылки на резюме
     await state.set_state(ResumeStates.waiting_for_resume_link)
-    await callback.message.answer("Пожалуйста, отправьте ссылку на ваше резюме:")
+    await callback.message.edit_text("Пожалуйста, отправьте ссылку на ваше резюме:")
     await callback.answer()
 
 # Обработчик нажатий на кнопку "Отправить ссылку на портфолио"
@@ -442,7 +481,7 @@ async def portfolio(callback: CallbackQuery, state: FSMContext):
 
     # Устанавливаем состояние для получения ссылки на портфолио
     await state.set_state(ResumeStates.waiting_for_portfolio_link)
-    await callback.message.answer("Пожалуйста, отправьте ссылку на ваше портфолио:")
+    await callback.message.edit_text("Пожалуйста, отправьте ссылку на ваше портфолио:")
     await callback.answer()
 
 

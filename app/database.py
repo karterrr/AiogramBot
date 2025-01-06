@@ -22,7 +22,8 @@ async def db_start():
         CREATE TABLE IF NOT EXISTS contests (
             contest_id INTEGER PRIMARY KEY AUTOINCREMENT, 
             contest_name TEXT NOT NULL, 
-            contest_description TEXT
+            contest_description TEXT,
+            contest_status TINYINT(1)
         )
         """)
 
@@ -31,7 +32,8 @@ async def db_start():
         CREATE TABLE IF NOT EXISTS vacancies (
             vacancy_id INTEGER PRIMARY KEY AUTOINCREMENT, 
             vacancy_name TEXT NOT NULL, 
-            vacancy_description TEXT
+            vacancy_description TEXT,
+            vacancy_status TINYINT(1)
         )
         """)
 
@@ -42,7 +44,7 @@ async def db_start():
             vacancy_id INTEGER NOT NULL,
             task_name TEXT NOT NULL,
             task_description TEXT, 
-            task_status TEXT DEFAULT 'Active', 
+            task_status TINYINT(1), 
             FOREIGN KEY (vacancy_id) REFERENCES vacancies(vacancy_id)
         )
         """)
@@ -64,6 +66,7 @@ async def db_start():
             task_id INTEGER NOT NULL,
             action_type TEXT NOT NULL CHECK(action_type IN ('взял', 'сдал')),
             action_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            task_link TEXT,
             FOREIGN KEY (user_id) REFERENCES users(user_id)
         )                 
         """)
@@ -75,6 +78,8 @@ async def db_start():
             question TEXT NOT NULL,
             q_type TEXT NOT NULL CHECK(q_type IN ('to bot', 'to admin')),
             q_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            a_date TIMESTAMP,
+            answered TINYINT(1),
             FOREIGN KEY (user_id) REFERENCES users(user_id)
         )                 
         """)
